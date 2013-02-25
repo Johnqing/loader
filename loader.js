@@ -1,4 +1,4 @@
-(function(win){
+﻿(function(win){
 	'use strict';
 	
 	if(win.define){
@@ -76,6 +76,7 @@
 		if(name === initModName){
 			runModel(name);
 		}
+		return tempObj;
 	}
 	win.define = define;
 }(this))
