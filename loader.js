@@ -79,4 +79,4 @@
 		return tempObj;
 	}
 	win.define = define;
-}(this))
+}(this));
