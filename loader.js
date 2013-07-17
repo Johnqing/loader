@@ -1,82 +1,106 @@
-﻿(function(win){
-	'use strict';
-	
-	if(win.define){
-		return;
-	}	
-	//是否为函数
-	var isFunction = function (obj) {
-		return Object.prototype.toString.call(obj) === '[object Function]';
-	}
-	//get script
-	var initModName = null
-	, script = win.document.getElementsByTagName('script')
-	, dataMain;
-	//get dataMain
-	for(var i=0;i<script.length && !initModName;i++){
-		dataMain = script[i].getAttribute('data-main').split('/');
-		initModName = dataMain[dataMain.length-1];
-	}
-	//not have dataMain
-	if(!initModName){
-		throw new Error('缺少入口函数');
-	}
-	//create main.js
-	var cScript = win.document.createElement('script');
-	cScript.src = dataMain.join('/')+'.js';
-	win.document.body.appendChild(cScript);
-	// require,tempObj
-	var require
-	, tempObj={};
-	
-	var runModel = function(name){
-		var exports = {};
-		var mod = tempObj[name];
+(function(global, undefined){
+    var noop = function(){},
+        fileMap = {}, //文件路径
+        moduleMap = {};//模块储存
+    function isType(type){
+        return function(obj){
+            return Object.prototype.toString.call(obj) === '[object '+ type +']';
+        }
+    }
+    var isObject = isType('Object'),
+        isString = isType('String'),
+        isArray = isType('Array'),
+        isFunction = isType('Function');
+    /**
+     *
+     * @param id
+     * @param dependencies
+     * @param factory
+     * @returns {*}
+     */
+    function define(id, dependencies, factory){
+        //如果不存在模块 就构建一个新的，存在的话 就返回
+        if(!moduleMap[id]){
+            var module = {
+                id: id,
+                dependencies: dependencies,
+                factory: factory
+            }
+            moduleMap[id] = module;
+        }
+        return moduleMap[id];
+    }
 
-		if(!isFunction(mod.factory)) {
-			mod.ret = mod.factory;
-		}else{
-			//模块未实现
-			var ret = tempObj[name].factory.apply(undefined, [require, exports, undefined]); 
-			mod.ret = ret === undefined ? exports : ret;
-			
-		}
-		mod.inited = true;
-	}
-	
-	require = function (name){
-		if(!tempObj[name]){
-			throw new Error(name + ' not define');
-		}
-		var mod = tempObj[name];
+    /**
+     * 获取依赖
+     * @param id
+     * @returns {*}
+     */
+    function use(id){
+        var module = moduleMap[id];
+        if(!module.entity){
+            var args = [];
+            for(var i=0; i<module.dependencies.length; i++){
+                var dep = module.dependencies[i],
+                    entity = moduleMap[dep].entity;
+                if(entity){
+                    args.push(entity);
+                }else{
+                    args.push(this.use(dep));
+                }
+            }
+            module.entity = module.factory.apply(noop, args);
+        }
+        return module.entity;
+    }
 
-		if(mod.inited === false){
-			runModel(name);
-		}
+    /**
+     * 加载模块
+     * @param path
+     * @param callback
+     */
+    function require(path, callback){
+        var pathArr = [];
+        if(isString(path)){
+            pathArr.push(path);
+        }
+        if(isArray(path)){
+            pathArr = path;
+        }
+        addScript(pathArr, callback);
+    }
+    function addScript(pathArr, callback){
+        for (var i = 0; i < pathArr.length; i++) {
+           var path = pathArr[i];
 
-		return mod.ret;
-	}
-	
+           if (!fileMap[path]) {
+               var head = document.getElementsByTagName('head')[0];
+               var node = document.createElement('script');
+               node.type = 'text/javascript';
+               node.async = 'true';
+               node.src = path + '.js';
+               node.onload = function () {
+                   fileMap[path] = true;
+                   head.removeChild(node);
+                   checkAllFiles(path, callback);
+               };
+               head.appendChild(node);
+           }
+        }
+    }
+    function checkAllFiles(path, callback){
+        for (var i = 0; i < path.length; i++) {
+            if (!fileMap[path[i]]) {
+                allLoaded = false;
+                break;
+            }
+        }
 
-	var define = function (name, deps, factory){
-		if(tempObj[name]){
-			throw new Error(name + ' not define');
-		}
-		if(isFunction(name)){
-			factory = name;
-		}
-		if(isFunction(deps)) {
-			factory = deps;
-		}
-		tempObj[name] = {
-			factory : factory,
-			inited  : false
-		};
-		factory();
-		if(name === initModName){
-			runModel(name);
-		}
-		return tempObj;
-	}
-	win.define = define;
+        if (allLoaded) {
+            callback();
+        }
+    }
+    global.require = require;
+    global.use = use;
+    global.define = define;
 }(this));
